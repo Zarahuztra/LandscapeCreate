@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>1-Day Landscape Playground (Prototype)</title>
+    <title>1-Day Landscape Playground (With Depth Control)</title>
     <style>
       * {
         box-sizing: border-box;
@@ -54,7 +54,6 @@
         cursor: grabbing;
       }
 
-      /* world er den store flaten */
       #world {
         position: absolute;
         width: 8000px;
@@ -68,7 +67,6 @@
         transform-origin: top left;
       }
 
-      /* grid som zoomer med world */
       #gridOverlay {
         pointer-events: none;
         position: absolute;
@@ -83,7 +81,6 @@
         z-index: 1;
       }
 
-      /* PNG-tiles */
       .instance {
         position: absolute;
         transform-origin: center center;
@@ -91,7 +88,6 @@
         user-select: none;
         border: 2px solid transparent;
         border-radius: 4px;
-        z-index: 2; /* over grid */
       }
 
       .instance.selected {
@@ -182,8 +178,8 @@
       <header>
         <h1>1-Day Landscape Playground</h1>
         <div class="info">
-          Scroll = zoom · Høyre museknapp / Space + dra = pan · Klikk på PNG =
-          velg · Venstre dra = flytt
+          Scroll=Zoom · Høyre museknapp/Space+drag=Pan · Klikk=Velg ·
+          Venstre-drag=Flytt
         </div>
       </header>
 
@@ -213,6 +209,7 @@
               value="1"
             />
           </label>
+
           <label>
             Rotation
             <input
@@ -224,6 +221,19 @@
               value="0"
             />
           </label>
+
+          <label>
+            Depth
+            <input
+              type="range"
+              id="depthSlider"
+              min="1"
+              max="999"
+              step="1"
+              value="10"
+            />
+          </label>
+
           <button id="flipHBtn">Flip H</button>
           <button id="resetView">Reset view</button>
         </div>
@@ -238,6 +248,7 @@
       const resetViewBtn = document.getElementById("resetView");
       const sizeSlider = document.getElementById("sizeSlider");
       const rotationSlider = document.getElementById("rotationSlider");
+      const depthSlider = document.getElementById("depthSlider");
       const flipHBtn = document.getElementById("flipHBtn");
 
       let tiles = [];
@@ -247,7 +258,6 @@
 
       let selectedInstanceId = null;
 
-      // Pan + zoom transform state
       let scale = 0.4;
       let offsetX = -2000;
       let offsetY = -2000;
@@ -263,23 +273,26 @@
 
       function setSelectedInstance(id) {
         selectedInstanceId = id;
+
         document.querySelectorAll(".instance").forEach((el) => {
           el.classList.remove("selected");
         });
+
         if (!id) return;
+
         const el = document.querySelector(
           `.instance[data-instance-id="${id}"]`
         );
         if (el) el.classList.add("selected");
 
         const inst = getInstanceById(id);
-        if (inst) {
-          sizeSlider.value = inst.scale;
-          rotationSlider.value = inst.rotation;
-        }
+        if (!inst) return;
+
+        sizeSlider.value = inst.scale;
+        rotationSlider.value = inst.rotation;
+        depthSlider.value = inst.z;
       }
 
-      // Upload tiles
       fileInput.addEventListener("change", (e) => {
         const files = [...e.target.files];
         files.forEach((file) => {
@@ -314,7 +327,6 @@
         palette.appendChild(el);
       }
 
-      // --- FIXED DROP POSITION ---
       worldWrapper.addEventListener("dragover", (e) => e.preventDefault());
 
       worldWrapper.addEventListener("drop", (e) => {
@@ -322,7 +334,6 @@
         const tileId = e.dataTransfer.getData("text/plain");
         if (!tileId) return;
 
-        // KONVERTER SKJERM → WORLD
         const worldX = (e.clientX - offsetX) / scale;
         const worldY = (e.clientY - offsetY) / scale;
 
@@ -334,7 +345,9 @@
           scale: 1,
           rotation: 0,
           flipped: false,
+          z: 10,
         };
+
         instances.push(instance);
         addInstanceElement(instance);
         setSelectedInstance(instance.id);
@@ -354,19 +367,16 @@
 
         positionInstanceElement(el, instance);
 
-        // Velg
         el.addEventListener("mousedown", (e) => {
           if (e.button === 0) setSelectedInstance(instance.id);
         });
 
-        // Dragging
         let dragging = false;
         let startX, startY, startWorldX, startWorldY;
 
         el.addEventListener("mousedown", (e) => {
           if (e.button !== 0) return;
           e.stopPropagation();
-
           dragging = true;
           setSelectedInstance(instance.id);
 
@@ -407,16 +417,16 @@
         el.style.left = instance.x + "px";
         el.style.top = instance.y + "px";
         el.style.transform = `translate(-50%, -50%) rotate(${instance.rotation}deg) scale(${sx}, ${sy})`;
+
+        el.style.zIndex = instance.z;
       }
 
-      // Klikk på tomt område → fjern selection
       worldWrapper.addEventListener("mousedown", (e) => {
         if (e.target === worldWrapper || e.target === world) {
           setSelectedInstance(null);
         }
       });
 
-      // Pan world
       let panning = false;
       let panStartX = 0,
         panStartY = 0;
@@ -462,29 +472,23 @@
 
       worldWrapper.addEventListener("contextmenu", (e) => e.preventDefault());
 
-      // Zoom
       worldWrapper.addEventListener(
         "wheel",
         (e) => {
           e.preventDefault();
 
-          const zoomFactor = 1.05;
-
-          // world pos før zoom
           const worldXBefore = (e.clientX - offsetX) / scale;
           const worldYBefore = (e.clientY - offsetY) / scale;
 
-          // oppdater scale
+          const zoomFactor = 1.05;
           if (e.deltaY < 0) scale *= zoomFactor;
           else scale /= zoomFactor;
 
           scale = Math.max(0.1, Math.min(2, scale));
 
-          // world pos etter zoom
           const worldXAfter = (e.clientX - offsetX) / scale;
           const worldYAfter = (e.clientY - offsetY) / scale;
 
-          // flytt offset slik at punktet under musa står stille
           offsetX += (worldXAfter - worldXBefore) * scale;
           offsetY += (worldYAfter - worldYBefore) * scale;
 
@@ -493,7 +497,6 @@
         { passive: false }
       );
 
-      // Reset view
       resetViewBtn.addEventListener("click", () => {
         scale = 0.4;
         offsetX = -2000;
@@ -501,10 +504,10 @@
         updateWorldTransform();
       });
 
-      // UI for valgt instans
       sizeSlider.addEventListener("input", () => {
         const inst = getInstanceById(selectedInstanceId);
         if (!inst) return;
+
         inst.scale = parseFloat(sizeSlider.value);
 
         const el = document.querySelector(
@@ -516,7 +519,19 @@
       rotationSlider.addEventListener("input", () => {
         const inst = getInstanceById(selectedInstanceId);
         if (!inst) return;
+
         inst.rotation = parseFloat(rotationSlider.value);
+        const el = document.querySelector(
+          `.instance[data-instance-id="${inst.id}"]`
+        );
+        if (el) positionInstanceElement(el, inst);
+      });
+
+      depthSlider.addEventListener("input", () => {
+        const inst = getInstanceById(selectedInstanceId);
+        if (!inst) return;
+
+        inst.z = parseInt(depthSlider.value);
 
         const el = document.querySelector(
           `.instance[data-instance-id="${inst.id}"]`
@@ -527,6 +542,7 @@
       flipHBtn.addEventListener("click", () => {
         const inst = getInstanceById(selectedInstanceId);
         if (!inst) return;
+
         inst.flipped = !inst.flipped;
 
         const el = document.querySelector(
