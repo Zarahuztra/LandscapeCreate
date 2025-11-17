@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>1-Day Landscape Playground (Prototype)</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        font-family: system-ui, sans-serif;
+        background: #111;
+        color: #f5f5f5;
+      }
+
+      #app {
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+        height: 100vh;
+      }
+
+      header {
+        padding: 0.5rem 1rem;
+        background: #181818;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border-bottom: 1px solid #333;
+      }
+
+      header h1 {
+        font-size: 1rem;
+        margin: 0;
+      }
+
+      header .info {
+        font-size: 0.8rem;
+        opacity: 0.8;
+      }
+
+      #world-wrapper {
+        position: relative;
+        background: #050505;
+        overflow: hidden;
+        cursor: grab;
+      }
+
+      #world-wrapper.dragging {
+        cursor: grabbing;
+      }
+
+      /* world er den store flaten */
+      #world {
+        position: absolute;
+        width: 8000px;
+        height: 8000px;
+        background: radial-gradient(
+          circle at top,
+          #333 0,
+          #050505 55%,
+          #000 100%
+        );
+        transform-origin: top left;
+      }
+
+      /* grid som zoomer med world */
+      #gridOverlay {
+        pointer-events: none;
+        position: absolute;
+        inset: 0;
+        background-image: linear-gradient(
+            to right,
+            #ffffff40 1px,
+            transparent 1px
+          ),
+          linear-gradient(to bottom, #ffffff40 1px, transparent 1px);
+        background-size: 200px 200px;
+        z-index: 1;
+      }
+
+      /* PNG-tiles */
+      .instance {
+        position: absolute;
+        transform-origin: center center;
+        cursor: move;
+        user-select: none;
+        border: 2px solid transparent;
+        border-radius: 4px;
+        z-index: 2; /* over grid */
+      }
+
+      .instance.selected {
+        border-color: #ffb74d;
+        box-shadow: 0 0 0 2px #000;
+      }
+
+      .instance img {
+        display: block;
+        max-width: 400px;
+        max-height: 400px;
+        pointer-events: none;
+      }
+
+      footer {
+        background: #181818;
+        border-top: 1px solid #333;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 0.5rem 1rem;
+        overflow-x: auto;
+        font-size: 0.8rem;
+      }
+
+      #palette {
+        display: flex;
+        gap: 0.5rem;
+      }
+
+      .tile {
+        border: 1px solid #444;
+        border-radius: 4px;
+        background: #222;
+        padding: 0.25rem;
+        cursor: grab;
+        flex: 0 0 auto;
+      }
+
+      .tile img {
+        display: block;
+        width: 80px;
+        height: 80px;
+        object-fit: cover;
+        pointer-events: none;
+      }
+
+      .controls {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-left: auto;
+      }
+
+      .controls label {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+        white-space: nowrap;
+      }
+
+      button {
+        background: #333;
+        color: #f5f5f5;
+        border: 1px solid #555;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 0.8rem;
+        white-space: nowrap;
+      }
+
+      button:hover {
+        background: #444;
+      }
+
+      input[type="file"] {
+        font-size: 0.8rem;
+      }
+
+      input[type="range"] {
+        width: 120px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <header>
+        <h1>1-Day Landscape Playground</h1>
+        <div class="info">
+          Scroll = zoom · Høyre museknapp / Space + dra = pan · Klikk på PNG =
+          velg · Venstre dra = flytt
+        </div>
+      </header>
+
+      <div id="world-wrapper">
+        <div id="world">
+          <div id="gridOverlay"></div>
+        </div>
+      </div>
+
+      <footer>
+        <label>
+          Upload tile:
+          <input type="file" id="fileInput" accept="image/*" multiple />
+        </label>
+
+        <div id="palette"></div>
+
+        <div class="controls">
+          <label>
+            Size
+            <input
+              type="range"
+              id="sizeSlider"
+              min="0.2"
+              max="3"
+              step="0.05"
+              value="1"
+            />
+          </label>
+          <label>
+            Rotation
+            <input
+              type="range"
+              id="rotationSlider"
+              min="0"
+              max="360"
+              step="1"
+              value="0"
+            />
+          </label>
+          <button id="flipHBtn">Flip H</button>
+          <button id="resetView">Reset view</button>
+        </div>
+      </footer>
+    </div>
+
+    <script>
+      const worldWrapper = document.getElementById("world-wrapper");
+      const world = document.getElementById("world");
+      const palette = document.getElementById("palette");
+      const fileInput = document.getElementById("fileInput");
+      const resetViewBtn = document.getElementById("resetView");
+      const sizeSlider = document.getElementById("sizeSlider");
+      const rotationSlider = document.getElementById("rotationSlider");
+      const flipHBtn = document.getElementById("flipHBtn");
+
+      let tiles = [];
+      let instances = [];
+      let tileIdCounter = 1;
+      let instanceIdCounter = 1;
+
+      let selectedInstanceId = null;
+
+      // Pan + zoom transform state
+      let scale = 0.4;
+      let offsetX = -2000;
+      let offsetY = -2000;
+
+      function updateWorldTransform() {
+        world.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
+      }
+      updateWorldTransform();
+
+      function getInstanceById(id) {
+        return instances.find((i) => i.id === id);
+      }
+
+      function setSelectedInstance(id) {
+        selectedInstanceId = id;
+        document.querySelectorAll(".instance").forEach((el) => {
+          el.classList.remove("selected");
+        });
+        if (!id) return;
+        const el = document.querySelector(
+          `.instance[data-instance-id="${id}"]`
+        );
+        if (el) el.classList.add("selected");
+
+        const inst = getInstanceById(id);
+        if (inst) {
+          sizeSlider.value = inst.scale;
+          rotationSlider.value = inst.rotation;
+        }
+      }
+
+      // Upload tiles
+      fileInput.addEventListener("change", (e) => {
+        const files = [...e.target.files];
+        files.forEach((file) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const tile = {
+              id: "tile_" + tileIdCounter++,
+              url: reader.result,
+            };
+            tiles.push(tile);
+            addTileToPalette(tile);
+          };
+          reader.readAsDataURL(file);
+        });
+        fileInput.value = "";
+      });
+
+      function addTileToPalette(tile) {
+        const el = document.createElement("div");
+        el.className = "tile";
+        el.draggable = true;
+        el.dataset.tileId = tile.id;
+
+        const img = document.createElement("img");
+        img.src = tile.url;
+        el.appendChild(img);
+
+        el.addEventListener("dragstart", (e) => {
+          e.dataTransfer.setData("text/plain", tile.id);
+        });
+
+        palette.appendChild(el);
+      }
+
+      // --- FIXED DROP POSITION ---
+      worldWrapper.addEventListener("dragover", (e) => e.preventDefault());
+
+      worldWrapper.addEventListener("drop", (e) => {
+        e.preventDefault();
+        const tileId = e.dataTransfer.getData("text/plain");
+        if (!tileId) return;
+
+        // KONVERTER SKJERM → WORLD
+        const worldX = (e.clientX - offsetX) / scale;
+        const worldY = (e.clientY - offsetY) / scale;
+
+        const instance = {
+          id: "inst_" + instanceIdCounter++,
+          tileId,
+          x: worldX,
+          y: worldY,
+          scale: 1,
+          rotation: 0,
+          flipped: false,
+        };
+        instances.push(instance);
+        addInstanceElement(instance);
+        setSelectedInstance(instance.id);
+      });
+
+      function addInstanceElement(instance) {
+        const tile = tiles.find((t) => t.id === instance.tileId);
+        if (!tile) return;
+
+        const el = document.createElement("div");
+        el.className = "instance";
+        el.dataset.instanceId = instance.id;
+
+        const img = document.createElement("img");
+        img.src = tile.url;
+        el.appendChild(img);
+
+        positionInstanceElement(el, instance);
+
+        // Velg
+        el.addEventListener("mousedown", (e) => {
+          if (e.button === 0) setSelectedInstance(instance.id);
+        });
+
+        // Dragging
+        let dragging = false;
+        let startX, startY, startWorldX, startWorldY;
+
+        el.addEventListener("mousedown", (e) => {
+          if (e.button !== 0) return;
+          e.stopPropagation();
+
+          dragging = true;
+          setSelectedInstance(instance.id);
+
+          startX = e.clientX;
+          startY = e.clientY;
+          startWorldX = instance.x;
+          startWorldY = instance.y;
+
+          document.addEventListener("mousemove", onMove);
+          document.addEventListener("mouseup", onUp);
+        });
+
+        function onMove(e) {
+          if (!dragging) return;
+
+          const dx = (e.clientX - startX) / scale;
+          const dy = (e.clientY - startY) / scale;
+
+          instance.x = startWorldX + dx;
+          instance.y = startWorldY + dy;
+          positionInstanceElement(el, instance);
+        }
+
+        function onUp() {
+          dragging = false;
+          document.removeEventListener("mousemove", onMove);
+          document.removeEventListener("mouseup", onUp);
+        }
+
+        world.appendChild(el);
+      }
+
+      function positionInstanceElement(el, instance) {
+        const flip = instance.flipped ? -1 : 1;
+        const sx = instance.scale * flip;
+        const sy = instance.scale;
+
+        el.style.left = instance.x + "px";
+        el.style.top = instance.y + "px";
+        el.style.transform = `translate(-50%, -50%) rotate(${instance.rotation}deg) scale(${sx}, ${sy})`;
+      }
+
+      // Klikk på tomt område → fjern selection
+      worldWrapper.addEventListener("mousedown", (e) => {
+        if (e.target === worldWrapper || e.target === world) {
+          setSelectedInstance(null);
+        }
+      });
+
+      // Pan world
+      let panning = false;
+      let panStartX = 0,
+        panStartY = 0;
+      let panStartOffsetX = 0,
+        panStartOffsetY = 0;
+      let spaceDown = false;
+
+      window.addEventListener("keydown", (e) => {
+        if (e.code === "Space") spaceDown = true;
+      });
+      window.addEventListener("keyup", (e) => {
+        if (e.code === "Space") spaceDown = false;
+      });
+
+      worldWrapper.addEventListener("mousedown", (e) => {
+        if (e.button === 2 || (spaceDown && e.button === 0)) {
+          panning = true;
+          worldWrapper.classList.add("dragging");
+
+          panStartX = e.clientX;
+          panStartY = e.clientY;
+          panStartOffsetX = offsetX;
+          panStartOffsetY = offsetY;
+        }
+      });
+
+      window.addEventListener("mousemove", (e) => {
+        if (!panning) return;
+
+        const dx = e.clientX - panStartX;
+        const dy = e.clientY - panStartY;
+
+        offsetX = panStartOffsetX + dx;
+        offsetY = panStartOffsetY + dy;
+
+        updateWorldTransform();
+      });
+
+      window.addEventListener("mouseup", () => {
+        panning = false;
+        worldWrapper.classList.remove("dragging");
+      });
+
+      worldWrapper.addEventListener("contextmenu", (e) => e.preventDefault());
+
+      // Zoom
+      worldWrapper.addEventListener(
+        "wheel",
+        (e) => {
+          e.preventDefault();
+
+          const zoomFactor = 1.05;
+
+          // world pos før zoom
+          const worldXBefore = (e.clientX - offsetX) / scale;
+          const worldYBefore = (e.clientY - offsetY) / scale;
+
+          // oppdater scale
+          if (e.deltaY < 0) scale *= zoomFactor;
+          else scale /= zoomFactor;
+
+          scale = Math.max(0.1, Math.min(2, scale));
+
+          // world pos etter zoom
+          const worldXAfter = (e.clientX - offsetX) / scale;
+          const worldYAfter = (e.clientY - offsetY) / scale;
+
+          // flytt offset slik at punktet under musa står stille
+          offsetX += (worldXAfter - worldXBefore) * scale;
+          offsetY += (worldYAfter - worldYBefore) * scale;
+
+          updateWorldTransform();
+        },
+        { passive: false }
+      );
+
+      // Reset view
+      resetViewBtn.addEventListener("click", () => {
+        scale = 0.4;
+        offsetX = -2000;
+        offsetY = -2000;
+        updateWorldTransform();
+      });
+
+      // UI for valgt instans
+      sizeSlider.addEventListener("input", () => {
+        const inst = getInstanceById(selectedInstanceId);
+        if (!inst) return;
+        inst.scale = parseFloat(sizeSlider.value);
+
+        const el = document.querySelector(
+          `.instance[data-instance-id="${inst.id}"]`
+        );
+        if (el) positionInstanceElement(el, inst);
+      });
+
+      rotationSlider.addEventListener("input", () => {
+        const inst = getInstanceById(selectedInstanceId);
+        if (!inst) return;
+        inst.rotation = parseFloat(rotationSlider.value);
+
+        const el = document.querySelector(
+          `.instance[data-instance-id="${inst.id}"]`
+        );
+        if (el) positionInstanceElement(el, inst);
+      });
+
+      flipHBtn.addEventListener("click", () => {
+        const inst = getInstanceById(selectedInstanceId);
+        if (!inst) return;
+        inst.flipped = !inst.flipped;
+
+        const el = document.querySelector(
+          `.instance[data-instance-id="${inst.id}"]`
+        );
+        if (el) positionInstanceElement(el, inst);
+      });
+    </script>
+  </body>
+</html>
