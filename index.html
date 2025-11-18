@@ -109,13 +109,22 @@
         align-items: center;
         gap: 1rem;
         padding: 0.5rem 1rem;
-        overflow-x: auto;
+        /* viktig: ikke scroll hele footeren horisontalt */
+        overflow: hidden;
         font-size: 0.8rem;
+      }
+
+      /* wrapper rundt paletten som kan scrolle */
+      #paletteWrapper {
+        flex: 1;
+        overflow-x: auto;
+        overflow-y: hidden;
       }
 
       #palette {
         display: flex;
         gap: 0.5rem;
+        padding-bottom: 0.25rem;
       }
 
       .tile {
@@ -140,6 +149,7 @@
         align-items: center;
         gap: 0.5rem;
         margin-left: auto;
+        white-space: nowrap;
       }
 
       .controls label {
@@ -195,7 +205,9 @@
           <input type="file" id="fileInput" accept="image/*" multiple />
         </label>
 
-        <div id="palette"></div>
+        <div id="paletteWrapper">
+          <div id="palette"></div>
+        </div>
 
         <div class="controls">
           <label>

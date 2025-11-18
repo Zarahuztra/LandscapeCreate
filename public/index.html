@@ -1,88 +1,589 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
   <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Welcome to Firebase Hosting</title>
+    <meta charset="UTF-8" />
+    <title>1-Day Landscape Playground</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
 
-    <!-- update the version number as needed -->
-    <script defer src="/__/firebase/12.6.0/firebase-app-compat.js"></script>
-    <!-- include only the Firebase features as you need -->
-    <script defer src="/__/firebase/12.6.0/firebase-auth-compat.js"></script>
-    <script defer src="/__/firebase/12.6.0/firebase-database-compat.js"></script>
-    <script defer src="/__/firebase/12.6.0/firebase-firestore-compat.js"></script>
-    <script defer src="/__/firebase/12.6.0/firebase-functions-compat.js"></script>
-    <script defer src="/__/firebase/12.6.0/firebase-messaging-compat.js"></script>
-    <script defer src="/__/firebase/12.6.0/firebase-storage-compat.js"></script>
-    <script defer src="/__/firebase/12.6.0/firebase-analytics-compat.js"></script>
-    <script defer src="/__/firebase/12.6.0/firebase-remote-config-compat.js"></script>
-    <script defer src="/__/firebase/12.6.0/firebase-performance-compat.js"></script>
-    <!-- 
-      initialize the SDK after all desired features are loaded, set useEmulator to false
-      to avoid connecting the SDK to running emulators.
-    -->
-    <script defer src="/__/firebase/init.js?useEmulator=true"></script>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        font-family: system-ui, sans-serif;
+        background: #111;
+        color: #f5f5f5;
+      }
 
-    <style media="screen">
-      body { background: #ECEFF1; color: rgba(0,0,0,0.87); font-family: Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; }
-      #message { background: white; max-width: 360px; margin: 100px auto 16px; padding: 32px 24px; border-radius: 3px; }
-      #message h2 { color: #ffa100; font-weight: bold; font-size: 16px; margin: 0 0 8px; }
-      #message h1 { font-size: 22px; font-weight: 300; color: rgba(0,0,0,0.6); margin: 0 0 16px;}
-      #message p { line-height: 140%; margin: 16px 0 24px; font-size: 14px; }
-      #message a { display: block; text-align: center; background: #039be5; text-transform: uppercase; text-decoration: none; color: white; padding: 16px; border-radius: 4px; }
-      #message, #message a { box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24); }
-      #load { color: rgba(0,0,0,0.4); text-align: center; font-size: 13px; }
-      @media (max-width: 600px) {
-        body, #message { margin-top: 0; background: white; box-shadow: none; }
-        body { border-top: 16px solid #ffa100; }
+      #app {
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+        height: 100vh;
+      }
+
+      header {
+        padding: 0.5rem 1rem;
+        background: #181818;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border-bottom: 1px solid #333;
+      }
+
+      header h1 {
+        font-size: 1rem;
+        margin: 0;
+      }
+
+      header .info {
+        font-size: 0.8rem;
+        opacity: 0.8;
+      }
+
+      #world-wrapper {
+        position: relative;
+        background: #050505;
+        overflow: hidden;
+        cursor: grab;
+      }
+
+      #world-wrapper.dragging {
+        cursor: grabbing;
+      }
+
+      #world {
+        position: absolute;
+        width: 8000px;
+        height: 8000px;
+        background: radial-gradient(
+          circle at top,
+          #333 0,
+          #050505 55%,
+          #000 100%
+        );
+        transform-origin: top left;
+      }
+
+      #gridOverlay {
+        pointer-events: none;
+        position: absolute;
+        inset: 0;
+        background-image: linear-gradient(
+            to right,
+            #ffffff40 1px,
+            transparent 1px
+          ),
+          linear-gradient(to bottom, #ffffff40 1px, transparent 1px);
+        background-size: 200px 200px;
+        z-index: 1;
+      }
+
+      .instance {
+        position: absolute;
+        transform-origin: center center;
+        cursor: move;
+        user-select: none;
+        border: 2px solid transparent;
+        border-radius: 4px;
+      }
+
+      .instance.selected {
+        border-color: #ffb74d;
+        box-shadow: 0 0 0 2px #000;
+      }
+
+      .instance img {
+        display: block;
+        max-width: 400px;
+        max-height: 400px;
+        pointer-events: none;
+      }
+
+      footer {
+        background: #181818;
+        border-top: 1px solid #333;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 0.5rem 1rem;
+        overflow: hidden; /* ingen horisontal scroll på hele footeren */
+        font-size: 0.8rem;
+      }
+
+      /* egen scrollbare container for paletten */
+      #paletteWrapper {
+        flex: 1;
+        overflow-x: auto;
+        overflow-y: hidden;
+      }
+
+      #palette {
+        display: flex;
+        gap: 0.5rem;
+        padding-bottom: 0.25rem;
+      }
+
+      .tile {
+        border: 1px solid #444;
+        border-radius: 4px;
+        background: #222;
+        padding: 0.25rem;
+        cursor: grab;
+        flex: 0 0 auto;
+      }
+
+      .tile img {
+        display: block;
+        width: 80px;
+        height: 80px;
+        object-fit: cover;
+        pointer-events: none;
+      }
+
+      .controls {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-left: auto;
+        white-space: nowrap;
+      }
+
+      .controls label {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+        white-space: nowrap;
+      }
+
+      button {
+        background: #333;
+        color: #f5f5f5;
+        border: 1px solid #555;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 0.8rem;
+        white-space: nowrap;
+      }
+
+      button:hover {
+        background: #444;
+      }
+
+      input[type="file"] {
+        font-size: 0.8rem;
+      }
+
+      input[type="range"] {
+        width: 120px;
       }
     </style>
   </head>
   <body>
-    <div id="message">
-      <h2>Welcome</h2>
-      <h1>Firebase Hosting Setup Complete</h1>
-      <p>You're seeing this because you've successfully setup Firebase Hosting. Now it's time to go build something extraordinary!</p>
-      <a target="_blank" href="https://firebase.google.com/docs/hosting/">Open Hosting Documentation</a>
+    <div id="app">
+      <header>
+        <h1>1-Day Landscape Playground</h1>
+        <div class="info">
+          Scroll=Zoom · Høyre museknapp/Space+drag=Pan · Klikk=Velg ·
+          Venstre-drag=Flytt
+        </div>
+      </header>
+
+      <div id="world-wrapper">
+        <div id="world">
+          <div id="gridOverlay"></div>
+        </div>
+      </div>
+
+      <footer>
+        <label>
+          Upload tile:
+          <input type="file" id="fileInput" accept="image/*" multiple />
+        </label>
+
+        <div id="paletteWrapper">
+          <div id="palette"></div>
+        </div>
+
+        <div class="controls">
+          <label>
+            Size
+            <input
+              type="range"
+              id="sizeSlider"
+              min="0.2"
+              max="3"
+              step="0.05"
+              value="1"
+            />
+          </label>
+
+          <label>
+            Rotation
+            <input
+              type="range"
+              id="rotationSlider"
+              min="0"
+              max="360"
+              step="1"
+              value="0"
+            />
+          </label>
+
+          <label>
+            Depth
+            <input
+              type="range"
+              id="depthSlider"
+              min="1"
+              max="999"
+              step="1"
+              value="10"
+            />
+          </label>
+
+          <button id="flipHBtn">Flip H</button>
+          <button id="resetView">Reset view</button>
+        </div>
+      </footer>
     </div>
-    <p id="load">Firebase SDK Loading&hellip;</p>
 
     <script>
-      document.addEventListener('DOMContentLoaded', function() {
-        const loadEl = document.querySelector('#load');
-        // // 🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥
-        // // The Firebase SDK is initialized and available here!
-        //
-        // firebase.auth().onAuthStateChanged(user => { });
-        // firebase.database().ref('/path/to/ref').on('value', snapshot => { });
-        // firebase.firestore().doc('/foo/bar').get().then(() => { });
-        // firebase.functions().httpsCallable('yourFunction')().then(() => { });
-        // firebase.messaging().requestPermission().then(() => { });
-        // firebase.storage().ref('/path/to/ref').getDownloadURL().then(() => { });
-        // firebase.analytics(); // call to activate
-        // firebase.analytics().logEvent('tutorial_completed');
-        // firebase.performance(); // call to activate
-        //
-        // // 🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥
+      const worldWrapper = document.getElementById("world-wrapper");
+      const world = document.getElementById("world");
+      const palette = document.getElementById("palette");
+      const fileInput = document.getElementById("fileInput");
+      const resetViewBtn = document.getElementById("resetView");
+      const sizeSlider = document.getElementById("sizeSlider");
+      const rotationSlider = document.getElementById("rotationSlider");
+      const depthSlider = document.getElementById("depthSlider");
+      const flipHBtn = document.getElementById("flipHBtn");
 
-        try {
-          let app = firebase.app();
-          let features = [
-            'auth', 
-            'database', 
-            'firestore',
-            'functions',
-            'messaging', 
-            'storage', 
-            'analytics', 
-            'remoteConfig',
-            'performance',
-          ].filter(feature => typeof app[feature] === 'function');
-          loadEl.textContent = `Firebase SDK loaded with ${features.join(', ')}`;
-        } catch (e) {
-          console.error(e);
-          loadEl.textContent = 'Error loading the Firebase SDK, check the console.';
+      // Disse må samsvare med filene i public/images/
+      const initialImagePaths = [
+        "images/island1.jpg",
+        "images/desert2.jpg",
+        "images/cliff1.png",
+        "images/cliff2.png",
+        "images/track1.png",
+        "images/whiteterrain1.jpg",
+        "images/water1.jpg",
+        "images/water2.jpg",
+        "images/water3.jpg",
+        "images/road1.png",
+      ];
+
+      let tiles = [];
+      let instances = [];
+      let tileIdCounter = 1;
+      let instanceIdCounter = 1;
+
+      let selectedInstanceId = null;
+
+      let scale = 0.4;
+      let offsetX = -2000;
+      let offsetY = -2000;
+
+      function updateWorldTransform() {
+        world.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
+      }
+      updateWorldTransform();
+
+      function getInstanceById(id) {
+        return instances.find((i) => i.id === id);
+      }
+
+      function setSelectedInstance(id) {
+        selectedInstanceId = id;
+
+        document.querySelectorAll(".instance").forEach((el) => {
+          el.classList.remove("selected");
+        });
+
+        if (!id) return;
+
+        const el = document.querySelector(
+          `.instance[data-instance-id="${id}"]`
+        );
+        if (el) el.classList.add("selected");
+
+        const inst = getInstanceById(id);
+        if (!inst) return;
+
+        sizeSlider.value = inst.scale;
+        rotationSlider.value = inst.rotation;
+        depthSlider.value = inst.z;
+      }
+
+      // Preload av bilder fra /images-mappa
+      window.addEventListener("load", () => {
+        initialImagePaths.forEach((path) => {
+          const tile = {
+            id: "tile_" + tileIdCounter++,
+            url: path,
+          };
+          tiles.push(tile);
+          addTileToPalette(tile);
+        });
+      });
+
+      fileInput.addEventListener("change", (e) => {
+        const files = [...e.target.files];
+        files.forEach((file) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            const tile = {
+              id: "tile_" + tileIdCounter++,
+              url: reader.result,
+            };
+            tiles.push(tile);
+            addTileToPalette(tile);
+          };
+          reader.readAsDataURL(file);
+        });
+        fileInput.value = "";
+      });
+
+      function addTileToPalette(tile) {
+        const el = document.createElement("div");
+        el.className = "tile";
+        el.draggable = true;
+        el.dataset.tileId = tile.id;
+
+        const img = document.createElement("img");
+        img.src = tile.url;
+        el.appendChild(img);
+
+        el.addEventListener("dragstart", (e) => {
+          e.dataTransfer.setData("text/plain", tile.id);
+        });
+
+        palette.appendChild(el);
+      }
+
+      worldWrapper.addEventListener("dragover", (e) => e.preventDefault());
+
+      worldWrapper.addEventListener("drop", (e) => {
+        e.preventDefault();
+        const tileId = e.dataTransfer.getData("text/plain");
+        if (!tileId) return;
+
+        const worldX = (e.clientX - offsetX) / scale;
+        const worldY = (e.clientY - offsetY) / scale;
+
+        const instance = {
+          id: "inst_" + instanceIdCounter++,
+          tileId,
+          x: worldX,
+          y: worldY,
+          scale: 1,
+          rotation: 0,
+          flipped: false,
+          z: 10,
+        };
+
+        instances.push(instance);
+        addInstanceElement(instance);
+        setSelectedInstance(instance.id);
+      });
+
+      function addInstanceElement(instance) {
+        const tile = tiles.find((t) => t.id === instance.tileId);
+        if (!tile) return;
+
+        const el = document.createElement("div");
+        el.className = "instance";
+        el.dataset.instanceId = instance.id;
+
+        const img = document.createElement("img");
+        img.src = tile.url;
+        el.appendChild(img);
+
+        positionInstanceElement(el, instance);
+
+        el.addEventListener("mousedown", (e) => {
+          if (e.button === 0) setSelectedInstance(instance.id);
+        });
+
+        let dragging = false;
+        let startX, startY, startWorldX, startWorldY;
+
+        el.addEventListener("mousedown", (e) => {
+          if (e.button !== 0) return;
+          e.stopPropagation();
+          dragging = true;
+          setSelectedInstance(instance.id);
+
+          startX = e.clientX;
+          startY = e.clientY;
+          startWorldX = instance.x;
+          startWorldY = instance.y;
+
+          document.addEventListener("mousemove", onMove);
+          document.addEventListener("mouseup", onUp);
+        });
+
+        function onMove(e) {
+          if (!dragging) return;
+
+          const dx = (e.clientX - startX) / scale;
+          const dy = (e.clientY - startY) / scale;
+
+          instance.x = startWorldX + dx;
+          instance.y = startWorldY + dy;
+          positionInstanceElement(el, instance);
         }
+
+        function onUp() {
+          dragging = false;
+          document.removeEventListener("mousemove", onMove);
+          document.removeEventListener("mouseup", onUp);
+        }
+
+        world.appendChild(el);
+      }
+
+      function positionInstanceElement(el, instance) {
+        const flip = instance.flipped ? -1 : 1;
+        const sx = instance.scale * flip;
+        const sy = instance.scale;
+
+        el.style.left = instance.x + "px";
+        el.style.top = instance.y + "px";
+        el.style.transform = `translate(-50%, -50%) rotate(${instance.rotation}deg) scale(${sx}, ${sy})`;
+
+        el.style.zIndex = instance.z;
+      }
+
+      worldWrapper.addEventListener("mousedown", (e) => {
+        if (e.target === worldWrapper || e.target === world) {
+          setSelectedInstance(null);
+        }
+      });
+
+      let panning = false;
+      let panStartX = 0,
+        panStartY = 0;
+      let panStartOffsetX = 0,
+        panStartOffsetY = 0;
+      let spaceDown = false;
+
+      window.addEventListener("keydown", (e) => {
+        if (e.code === "Space") spaceDown = true;
+      });
+      window.addEventListener("keyup", (e) => {
+        if (e.code === "Space") spaceDown = false;
+      });
+
+      worldWrapper.addEventListener("mousedown", (e) => {
+        if (e.button === 2 || (spaceDown && e.button === 0)) {
+          panning = true;
+          worldWrapper.classList.add("dragging");
+
+          panStartX = e.clientX;
+          panStartY = e.clientY;
+          panStartOffsetX = offsetX;
+          panStartOffsetY = offsetY;
+        }
+      });
+
+      window.addEventListener("mousemove", (e) => {
+        if (!panning) return;
+
+        const dx = e.clientX - panStartX;
+        const dy = e.clientY - panStartY;
+
+        offsetX = panStartOffsetX + dx;
+        offsetY = panStartOffsetY + dy;
+
+        updateWorldTransform();
+      });
+
+      window.addEventListener("mouseup", () => {
+        panning = false;
+        worldWrapper.classList.remove("dragging");
+      });
+
+      worldWrapper.addEventListener("contextmenu", (e) => e.preventDefault());
+
+      worldWrapper.addEventListener(
+        "wheel",
+        (e) => {
+          e.preventDefault();
+
+          const worldXBefore = (e.clientX - offsetX) / scale;
+          const worldYBefore = (e.clientY - offsetY) / scale;
+
+          const zoomFactor = 1.05;
+          if (e.deltaY < 0) scale *= zoomFactor;
+          else scale /= zoomFactor;
+
+          scale = Math.max(0.1, Math.min(2, scale));
+
+          const worldXAfter = (e.clientX - offsetX) / scale;
+          const worldYAfter = (e.clientY - offsetY) / scale;
+
+          offsetX += (worldXAfter - worldXBefore) * scale;
+          offsetY += (worldYAfter - worldYBefore) * scale;
+
+          updateWorldTransform();
+        },
+        { passive: false }
+      );
+
+      resetViewBtn.addEventListener("click", () => {
+        scale = 0.4;
+        offsetX = -2000;
+        offsetY = -2000;
+        updateWorldTransform();
+      });
+
+      sizeSlider.addEventListener("input", () => {
+        const inst = getInstanceById(selectedInstanceId);
+        if (!inst) return;
+
+        inst.scale = parseFloat(sizeSlider.value);
+
+        const el = document.querySelector(
+          `.instance[data-instance-id="${inst.id}"]`
+        );
+        if (el) positionInstanceElement(el, inst);
+      });
+
+      rotationSlider.addEventListener("input", () => {
+        const inst = getInstanceById(selectedInstanceId);
+        if (!inst) return;
+
+        inst.rotation = parseFloat(rotationSlider.value);
+        const el = document.querySelector(
+          `.instance[data-instance-id="${inst.id}"]`
+        );
+        if (el) positionInstanceElement(el, inst);
+      });
+
+      depthSlider.addEventListener("input", () => {
+        const inst = getInstanceById(selectedInstanceId);
+        if (!inst) return;
+
+        inst.z = parseInt(depthSlider.value);
+        const el = document.querySelector(
+          `.instance[data-instance-id="${inst.id}"]`
+        );
+        if (el) positionInstanceElement(el, inst);
+      });
+
+      flipHBtn.addEventListener("click", () => {
+        const inst = getInstanceById(selectedInstanceId);
+        if (!inst) return;
+
+        inst.flipped = !inst.flipped;
+        const el = document.querySelector(
+          `.instance[data-instance-id="${inst.id}"]`
+        );
+        if (el) positionInstanceElement(el, inst);
       });
     </script>
   </body>
